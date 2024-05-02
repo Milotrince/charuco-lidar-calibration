@@ -2,7 +2,7 @@ from typing import Tuple
 import numpy as np
 import open3d as o3d
 
-ICP_THRESHOLD = 10
+ICP_THRESHOLD = 0.05
 
 toCartesian = lambda a: [a[0] / a[2], a[1] / a[2]]
 transformation = lambda K, R, t, x: np.dot(K, (t + np.dot(R, x)))
@@ -48,8 +48,9 @@ def get_icp_transformation_matrix(source, target, init_transformation):
         ICP_THRESHOLD,
         init_transformation,
         o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=20000),
+        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=100000),
     )
+    print("inlier_rmse", p2p.inlier_rmse, "fitness", p2p.fitness)
     return p2p.transformation
 
 
@@ -59,7 +60,7 @@ def generate_sample_point_cloud() -> Tuple[np.ndarray, np.ndarray]:
 
     Returns np.ndarray
     """
-    mesh_axis = np.linspace(0, CUBE_LENGTH, num=200)
+    mesh_axis = np.linspace(0, CUBE_LENGTH, num=100)
     mesh_2d = np.stack(np.meshgrid(mesh_axis, mesh_axis), axis=2).reshape(-1, 2)
 
     total_points = len(mesh_2d)
@@ -72,6 +73,7 @@ def generate_sample_point_cloud() -> Tuple[np.ndarray, np.ndarray]:
     xz[:, ::2] = mesh_2d
 
     mesh_cube = np.concatenate([np.array(xy), np.array(yz), np.array(xz)])
+    mesh_cube = mesh_cube# + np.random.random(mesh_cube.shape) * 0.05
     reference_corners = np.array(REFERENCE_CORNERS)
 
     return mesh_cube, reference_corners

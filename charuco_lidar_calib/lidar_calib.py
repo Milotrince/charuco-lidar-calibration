@@ -19,6 +19,8 @@ SEGMENT_DIST_THRESH = 0.1
 SEGMENT_RANSAC_N = 100
 SEGMENT_RANSAC_IT = 1000
 
+DOWNSAMPLE_NUM_SAMPLES = (100**2)*3
+
 SHOW_FILTERED = True
 
 
@@ -39,7 +41,7 @@ def filter_and_calibrate(pcd_array: np.ndarray):
 
     # filter outliers for a final cleanup
     pcd_filtered, pcd_outliers = filter_outliers(pcd_clustered)
-    pcd_outliers.paint_uniform_color([1, 0, 0])
+    pcd_outliers.paint_uniform_color([0, 0, 1])
 
     # segment into planes
     # pcd_filtered, pcd_nonplanar = filter_planes(pcd_without_outliers)
@@ -56,19 +58,32 @@ def filter_and_calibrate(pcd_array: np.ndarray):
             [pcd_filtered],
         )
 
+    pcd_downsampled = pcd_filtered.farthest_point_down_sample(DOWNSAMPLE_NUM_SAMPLES)
+    print(len(pcd_downsampled.points))
+
     # align with ICP
     sample_mesh, sample_reference = generate_sample_point_cloud()
     sample_mesh_pcd = _array_to_pcd(sample_mesh)
     sample_reference_pcd = _array_to_pcd(sample_reference)
 
-    transform = get_icp_transformation_matrix(sample_mesh_pcd, pcd_filtered, np.eye(4))
+    furthest_point = get_furthest_point(pcd_downsampled)
 
-    transformed_mesh = sample_mesh_pcd.transform(transform)
+    transform_guess = np.eye(4)
+    rotation_guess = o3d.geometry.get_rotation_matrix_from_zyx(np.array([3*np.pi / 4, 0, 0]))
+    transform_guess[:3, :3] = rotation_guess
+    transform_guess[:3, 3] = furthest_point
+    transform = get_icp_transformation_matrix(sample_mesh_pcd, _copy_pcd(pcd_downsampled), transform_guess)
+
+    guess_transformed = _array_to_pcd(sample_mesh).transform(transform_guess)
+    guess_transformed.paint_uniform_color([1, 0, 0])
+    transformed_mesh = _array_to_pcd(sample_mesh).transform(transform)
     correspondence_pcd = sample_reference_pcd.transform(transform)
 
+    print(transform)
+    transformed_mesh.paint_uniform_color([0, 0, 1])
 
     o3d.visualization.draw_geometries(
-        [pcd_filtered, transformed_mesh]
+        [pcd_downsampled, guess_transformed, transformed_mesh]
     )
 
     return np.asarray(correspondence_pcd.points)
@@ -138,8 +153,6 @@ def filter_outliers(pcd: o3d.geometry.PointCloud):
     pcd_filtered, inlier_mask = pcd.remove_radius_outlier(
         OUTLIER_NEIGHBORS, OUTLIER_RADIUS
     )
-    print(len(pcd.points))
-    print(len(inlier_mask))
     pcd_outliers = pcd.select_by_index(inlier_mask, invert=True)
 
     return pcd_filtered, pcd_outliers
@@ -164,6 +177,11 @@ def filter_outliers(pcd: o3d.geometry.PointCloud):
 #
 #     return merged_pcds, cur_pcd
 
+def get_furthest_point(pcd: o3d.geometry.PointCloud):
+    points = np.asarray(pcd.points)
+
+    distances = np.linalg.norm(points, axis=1)
+    return points[np.argmax(distances)]
 
 def _array_to_pcd(arr: np.ndarray):
     pcd = o3d.geometry.PointCloud()
