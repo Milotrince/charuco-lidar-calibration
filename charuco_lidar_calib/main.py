@@ -7,7 +7,7 @@ import cv2
 
 from charuco_lidar_calib.charuco import get_board_poses
 
-ROSBAG_PATH = "data/cube1"
+ROSBAG_PATH = "data/rosbags/invert-cube1"
 LIDAR_TOPIC = "/luminar_front_points"
 IMAGE_TOPIC = "/vimba_front_left_center/image"
 
@@ -21,6 +21,6 @@ with AnyReader([bagpath], default_typestore=typestore) as reader:
          if connection.topic == LIDAR_TOPIC:
             print(timestamp, "lidar", msg.data)
          if connection.topic == IMAGE_TOPIC:
-            img = msg.data
-            poses = get_board_poses(img)
+            img = msg.data.reshape((1540, 2060, 3))
+            poses = get_board_poses(img, show=False)
             print(timestamp, "image", poses)

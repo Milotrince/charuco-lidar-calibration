@@ -5,8 +5,8 @@ ARUCO_DICT = cv2.aruco.DICT_4X4_250
 NUM_ARUCO_PER_BOARD = 4
 NUM_ROWS = 3
 NUM_COLS = 3
-SQUARE_LENGTH = 0.03
-MARKER_LENGTH = 0.02
+SQUARE_LENGTH = 0.192
+MARKER_LENGTH = 0.138
 LENGTH_PX = 300  # total length of the page in pixels
 MARGIN_PX = 0  # size of the margin in pixels
 FILE_PATH = "data/charuco/charuco_board"
@@ -27,12 +27,14 @@ for i in range(NUM_BOARDS):
 
 
 def get_board_poses(img, show=False):
+    params = cv2.aruco.DetectorParameters()
     poses = []
-    for board in boards:
-        detector = cv2.aruco.CharucoDetector(board)
+    for i, board in enumerate(boards):
+        detector = cv2.aruco.CharucoDetector(board, detectorParams=params)
         charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detectBoard(
             img
         )
+        img = cv2.aruco.drawDetectedMarkers(img.copy(), marker_corners, marker_ids)
         if charuco_ids is not None:
             success, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
                 charuco_corners, charuco_ids, board, CAM_MATRIX, CAM_DIST, None, None
@@ -40,11 +42,10 @@ def get_board_poses(img, show=False):
             if success:
                 poses.append((rvec, tvec))
                 if show:
-                    cv2.drawFrameAxes(
-                        img, CAM_MATRIX, CAM_DIST, rvec, tvec, length=0.1, thickness=15
-                    )
-                    cv2.imshow("image", img)
-                    cv2.waitKey(0)
+                    img = cv2.aruco.drawDetectedCornersCharuco(img.copy(), charuco_corners, charuco_ids, (255, 0, 0))
+    if show:
+        cv2.imshow("image", img)
+        cv2.waitKey(0)
     return poses
 
 
