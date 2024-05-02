@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "charuco-lidar-calib"
+version = "0.1.0"
+description = ""
+authors = ["Trinity Chung <trinityjchung@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+rosbags = "^0.10.0"
+opencv-python = "^4.9.0.80"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
