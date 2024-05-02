@@ -43,6 +43,8 @@ def get_board_poses(img, show=False):
                 poses.append((rvec, tvec))
                 if show:
                     img = cv2.aruco.drawDetectedCornersCharuco(img.copy(), charuco_corners, charuco_ids, (255, 0, 0))
+            else:
+                poses.append(None)
     if show:
         cv2.imshow("image", img)
         cv2.waitKey(0)
