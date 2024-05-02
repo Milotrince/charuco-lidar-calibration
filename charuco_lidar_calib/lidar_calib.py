@@ -1,27 +1,78 @@
 import numpy as np
 import open3d as o3d
+import matplotlib.pyplot as plt
+
+from charuco_lidar_calib.icp import generate_sample_point_cloud, get_icp_transformation_matrix
 
 
 GROUND_ANGLE_THRESH = 10
 BACKGROUND_DIST_THRESH = 3.5
 
+CLUSTER_EPS = 0.2
+CLUSTER_MIN = 500
+
+OUTLIER_NEIGHBORS = 100
+OUTLIER_RADIUS = 0.1
+
+NUM_PLANES = 3
+SEGMENT_DIST_THRESH = 0.1
+SEGMENT_RANSAC_N = 100
+SEGMENT_RANSAC_IT = 1000
+
+SHOW_FILTERED = True
+
 
 def filter_and_calibrate(pcd_array: np.ndarray):
-
-    # plane, inliers = pcd.segment_plane(0.1, 100, 10000)
     pcd = _array_to_pcd(pcd_array)
 
     # hard-coded filter background
     pcd_without_background, pcd_background = filter_background(pcd)
-    pcd_background.paint_uniform_color([1.0, 0, 0])
+    pcd_background.paint_uniform_color([1, 0, 0])
 
     # filter out ground
-    pcd_filtered, pcd_ground = filter_ground(pcd_without_background)
-    pcd_ground.paint_uniform_color([1.0, 1.0, 0])
+    pcd_without_ground, pcd_ground = filter_ground(pcd_without_background)
+    pcd_ground.paint_uniform_color([1, 1, 0])
+
+    # cluster
+    pcd_clustered, pcd_cluster_outliers = filter_cluster(pcd_without_ground)
+    pcd_cluster_outliers.paint_uniform_color([1, 0, 1])
+
+    # filter outliers for a final cleanup
+    pcd_filtered, pcd_outliers = filter_outliers(pcd_clustered)
+    pcd_outliers.paint_uniform_color([1, 0, 0])
+
+    # segment into planes
+    # pcd_filtered, pcd_nonplanar = filter_planes(pcd_without_outliers)
+    # pcd_nonplanar.paint_uniform_color([1, 0, 0])
+
+    pcd_filtered.paint_uniform_color([0, 1, 0])
+
+    if SHOW_FILTERED:
+        o3d.visualization.draw_geometries(
+            [pcd_filtered, pcd_outliers, pcd_cluster_outliers, pcd_ground, pcd_background],
+        )
+    else:
+        o3d.visualization.draw_geometries(
+            [pcd_filtered],
+        )
+
+    # align with ICP
+    sample_mesh, sample_reference = generate_sample_point_cloud()
+    sample_mesh_pcd = _array_to_pcd(sample_mesh)
+    sample_reference_pcd = _array_to_pcd(sample_reference)
+
+    transform = get_icp_transformation_matrix(sample_mesh_pcd, pcd_filtered, np.eye(4))
+
+    transformed_mesh = sample_mesh_pcd.transform(transform)
+    correspondence_pcd = sample_reference_pcd.transform(transform)
+
 
     o3d.visualization.draw_geometries(
-        [pcd_filtered, pcd_ground, pcd_background],
+        [pcd_filtered, transformed_mesh]
     )
+
+    return np.asarray(correspondence_pcd.points)
+
 
 
 def filter_ground(pcd: o3d.geometry.PointCloud):
@@ -59,6 +110,59 @@ def filter_background(pcd: o3d.geometry.PointCloud):
     background = pcd_array[~filter_mask]
     filtered_points = pcd_array[filter_mask]
     return _array_to_pcd(filtered_points), _array_to_pcd(background)
+
+
+def filter_cluster(pcd: o3d.geometry.PointCloud):
+    labels = np.array(pcd.cluster_dbscan(eps=CLUSTER_EPS, min_points=CLUSTER_MIN))
+
+    # find largest cluster
+    unique_labels, label_counts = np.unique(labels, return_counts=True)
+    largest_cluster_label = unique_labels[np.argmax(label_counts)]
+
+    # filter only largest cluster
+    filter_indices = np.argwhere(labels == largest_cluster_label)
+    filtered_pcd = pcd.select_by_index(filter_indices)
+    outliers = pcd.select_by_index(filter_indices, invert=True)
+
+    # max_label = labels.max()
+    # print(np.unique(labels))
+    # colors = plt.get_cmap("tab20")(labels / (max_label if max_label > 0 else 1))
+    # colors[labels < 0] = 0
+    # pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+
+    return filtered_pcd, outliers
+    # return pcd, pcd
+
+
+def filter_outliers(pcd: o3d.geometry.PointCloud):
+    pcd_filtered, inlier_mask = pcd.remove_radius_outlier(
+        OUTLIER_NEIGHBORS, OUTLIER_RADIUS
+    )
+    print(len(pcd.points))
+    print(len(inlier_mask))
+    pcd_outliers = pcd.select_by_index(inlier_mask, invert=True)
+
+    return pcd_filtered, pcd_outliers
+
+
+# def filter_planes(pcd: o3d.geometry.PointCloud):
+#     plane_pcds = []
+#
+#     cur_pcd = pcd
+#     for _ in range(NUM_PLANES):
+#         _, inlier_indices = cur_pcd.segment_plane(
+#             SEGMENT_DIST_THRESH, SEGMENT_RANSAC_N, SEGMENT_RANSAC_IT
+#         )
+#         inlier_pcd = cur_pcd.select_by_index(inlier_indices)
+#         cur_pcd = cur_pcd.select_by_index(inlier_indices, invert=True)
+#
+#         plane_pcds.append(inlier_pcd)
+#
+#     merged_pcds = _array_to_pcd(
+#         np.concatenate([np.asarray(plane_pcd.points) for plane_pcd in plane_pcds])
+#     )
+#
+#     return merged_pcds, cur_pcd
 
 
 def _array_to_pcd(arr: np.ndarray):
