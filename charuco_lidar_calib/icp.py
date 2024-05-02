@@ -43,3 +43,16 @@ def get_icp_transformation_matrix(source, target, init_transformation):
         o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000),
     )
     return p2p.transformation
+
+def generate_sample_point_cloud():
+   random_x = np.random.randint(100, size=600)
+   random_y = np.random.randint(100, size=600)
+   random_z = np.random.randint(100, size=600)
+   zeros = np.zeros_like(random_x)
+   perturbation = np.random.randint(-5, 5, size=600)
+
+   xy = zip(random_x, random_y, zeros + perturbation)
+   yz = zip(zeros + perturbation, random_y, random_z)
+   xz = zip(random_x, zeros + perturbation, random_z)
+
+   return xy + yz + xz
